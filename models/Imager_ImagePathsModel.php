@@ -28,8 +28,12 @@ class Imager_ImagePathsModel extends BaseModel
             if (strpos($image, craft()->imager->getSetting('imagerUrl')) !== false) { // url to a file that is in the imager library
                 $this->getPathsForLocalImagerFile($image);
             } else {
-                if (strrpos($image, 'http') !== false) { // external file
+                if (strrpos($image, 'http') === 0 || strrpos($image, '//') === 0) { // external file
                     $this->isRemote = true;
+                    if (strrpos($image, '//') === 0)
+                    {
+                        $image = 'https:'.$image;
+                    }
                     $this->_getPathsForUrl($image);
                 } else { // relative path, assume that it's relative to document root
                     $this->_getPathsForLocaleFile($image);
@@ -148,7 +152,7 @@ class Imager_ImagePathsModel extends BaseModel
         $this->sourcePath = craft()->path->getRuntimePath() . 'imager/' . $parsedDirname . '/';
         $this->targetPath = craft()->imager->getSetting('imagerSystemPath') . $parsedDirname . '/';
         $this->targetUrl = craft()->imager->getSetting('imagerUrl') . $parsedDirname . '/';
-        $this->sourceFilename = $this->targetFilename = $pathParts['basename'];
+        $this->sourceFilename = $this->targetFilename = str_replace(' ', '-', $pathParts['basename']);
 
         // check if the temp path for remote files exists or can be created.
         if (!IOHelper::getRealPath($this->sourcePath)) {
