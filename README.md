@@ -13,6 +13,7 @@ Whenever possible, Imager utilizes the image manipulation library [Imagine](http
 - You can even upload and serve the transformed images from AWS.
 - Optimize your created images automatically with jpegoptim, jpegtran, optipng or TinyPNG.
 - You can create interlaced/progressive images.
+- In addition to jpeg, gif and png, you can save images in webp format (if you have the necessary server requirements).
 - Crop position is relative (in percent) not confined to edges/center (but the built-in keywords still works).  
 `{ width: 600, height: 600, mode: 'crop', position: '20% 65%' }`
 - New cropZoom parameter for when you want to get a little closer.  
@@ -95,6 +96,41 @@ Defines the JPEG compression level. Higher values equals better quality and bigg
 *Default: `2`*  
 Defines the PNG compression level. PNG compression is always lossless, so this setting doesn't have any effect on quality. It only affects speed and filesize. A lower value means faster compression, but bigger filesizes. A value of 0 means "no compression", which is the preferred setting if you're doing any post optimizations of png images (with Optipng or TinyPNG).
 
+### webpQuality [int]
+*Default: `80`*  
+Defines the WEBP compression level. Higher values equals better quality and bigger filesizes.
+
+### webpImagickOptions [array]
+*Default: `array()`*  
+Additional options you want to pass to Imagick when creating webp files. See [the ImageMagick documentation](http://www.imagemagick.org/script/webp.php) for possible options (although, all are not supported by Imagick).
+
+Example on how to use it in config files:
+
+    'webpImagickOptions' => array(
+        'lossless' => 'true',
+        'method' => '5',
+    ),
+    
+Example on how to use it in your template code:
+    
+    {% set webpImage = craft.imager.transformImage(image, { width: 500, format: 'webp', webpImagickOptions: { lossless: 'true', method: '1' } }) %}
+
+### useCwebp [bool]
+*Default: `false`*  
+If you don't have support for webp in the image driver you're using (GD or Imagick), you can set this to `true` to use the cwebp command line tool instead. cwebp needs to be installed
+on the server, but is available on most linux distros.
+
+When using cwebp, Imager will first create a temprary, high quality, transformed image in the source format (jpeg, png or gif), and then convert this to webp.
+Since this results in two images being created for each transformed image, the operation is a bit slower (~15-20%) than using the image driver directly. 
+
+### cwebpPath [string]
+*Default: `/usr/bin/cwebp`*  
+Path to the cwebp binary.
+
+### cwebpOptions [string]
+*Default: ``*  
+Options to pass o the cwebp binary (use `cwebp -longhelp` to see available options). Quality (-q) is automatically added based on `webpQuality`.  
+
 ### interlace [bool|string]
 *Default: `false`*  
 *Allowed values: `false`, `true` (`'line'`), `'none'`, `'line'`, `'plane'`, `'partition'`*   
@@ -165,6 +201,10 @@ If set to `false`, the filename will contain the generated string in clear text.
 
 If set to `true`, the whole filename is hashed. This will result in a short, but obscured, filename.
 
+### hashPath [bool]
+*Default: `false`*  
+When enabled, the path of the transformed asset will be hashed.  
+
 ### hashRemoteUrl [bool|string]
 *Default: `false`*  
 *Allowed values: `true`, `false`, `'host'`*   
@@ -202,7 +242,19 @@ Sets the path to your jpegtran executable.
 
 ### jpegtranOptionString [string]
 *Default: `'-optimize -copy none'`*  
-Sets the options to use when running jpegoptim. By default huffman tables are optimized, and no markers are copied from the source file.
+Sets the options to use when running jpegtran. By default huffman tables are optimized, and no markers are copied from the source file.
+
+### mozjpegEnabled [bool]
+*Default: `false`*  
+Enable or disable image optimizations with [mozjpeg](https://github.com/mozilla/mozjpeg).
+
+### mozjpegPath [string]
+*Default: `'/usr/bin/mozjpeg'`*  
+Sets the path to your mozjpeg executable.
+
+### mozjpegOptionString [string]
+*Default: `'-optimize -copy none'`*  
+Sets the options to use when running mozjpeg. By default huffman tables are optimized, and no markers are copied from the source file.
 
 ### optipngEnabled [bool]
 *Default: `false`*  
@@ -270,6 +322,18 @@ Additional request headers to send to AWS.
 *Allowed values: `'standard'`, `'rrs'`*   
 Sets the AWS storage type. 
 
+### cloudfrontInvalidateEnabled [bool]
+*Default: `false`*  
+Enabled or disables the sending of invalidation requests to Cloudfront when a transform is generated.
+ 
+*Please note: Imager has no way of knowing if the file currently on Cloudfront differs from the one being 
+generated, so an invalidation request is sent every time a transform is created. The first 1000 invalidation
+requests per month is free, after that Amazon will start charging you.*
+
+### cloudfrontDistributionId [string]
+*Default: `''`*  
+Set this to your Cloudfront distribution ID if cloudfront invalidation is enabled. 
+
 ### curlOptions [array]
 *Default: `array()`*  
 Allows you to add [cURL options](http://php.net/manual/en/function.curl-setopt.php) to be used when downloading images from an external host.    
@@ -297,6 +361,11 @@ Make sure you **don't** set `CURLOPT_FILE`, since it is set by Imager to be the 
 Craft automatically runs any pending tasks on normal site requests, but not on ajax-request, leaving any optimization tasks that Imager has created in a queue that is run on the next CP request. By default Imager solves this by triggering `runPendingTasks` manually if the request was an ajax request, and a task was created (curl needed).   
 
 If you for some reason want to disable this behavior, change this setting to `false`.   
+
+### clearKey [string]  
+*Default: `''`*  
+Key to use when clearing the transform or remote images cache with the controller actions. An empty string means clearing is disabled
+
 
 ---
 
@@ -383,6 +452,18 @@ Outputs a srcset string from an array of transformed images.
 **images**: An array of Imager_ImageModel objects, or anything else that support the interface.  
 **descriptior**: A string indicating which size descriptor should be used in the srcset. *Only 'w' is supported at the moment.*
 
+### craft.imager.serverSupportsWebp()
+Returns `true` or `false` depending on if the server has support for webp or not. This could either indicate built in support for webp in the current image driver, GD or Imagick, or the presence of the cwebp binary if this has been enabled.  
+
+### craft.imager.clientSupportsForWebp()
+Returns `true` or `false` depending on if the client has support for webp or not. This is deducted from the Accept header that the client sends.   
+  
+*If you use template caching, or any kind of front side cache (Varnish, Fastly, etc), make sure you create different caches based on if the client has support for webp or not. For template caching, adding a string to the key based on this variable, is one way to solve it. Example:*
+  
+    {% cache using key "my-content" ~ (craft.imager.clientSupportsForWebp ? "-with-webp") %}  
+    ...
+    {% endcache %}
+ 
 ### craft.imager.getDominantColor(image [, quality=10, colorValue='hex'])
 Gets the dominant color of an image. Uses [Color Thief](https://github.com/ksubileau/color-thief-php) for all the magic.
 
@@ -412,7 +493,7 @@ The following parameters are available in the transform object.
 
 ### format [string]
 *Default: `null`*  
-*Allowed values: `null`, `'jpg'`, `'png'`, `'gif'`*   
+*Allowed values: `null`, `'jpg'`, `'png'`, `'gif'`, `'webp'`*   
 Format of the created image. If unset (default) it will be the same format as the source image.
 
 ### width [int]
@@ -626,6 +707,22 @@ Returns a data uri with the image base64 encoded as a string.
 **getBase64Encoded() [string]**  
 Returns a string of the base64 encoded image data.   
 
+---
+
+Controller actions
+---
+Imager has two controller actions, one for clearing the transformed images cache, and one for clearing remote images.
+You can use this if you wish to clear the cache as part of your deploy process, or similar.
+
+Both actions needs a parameter `key`, which is set with the `clearKey` config setting.
+ 
+Clearing transform images cache:  
+    
+    http://yourdomain.com/actions/imager/clearTransforms?key=<your_key>
+
+Clearing external images cache:  
+    
+    http://yourdomain.com/actions/imager/clearRemoteImages?key=<your_key>
 
 ---
 
@@ -636,12 +733,6 @@ When caching is enabled (`cacheEnabled` configuration setting set to `true`) tra
 It is possible to manually remove the generated transforms by going to Settings > Clear Caches, selecting "Imager image transform cache" and clicking "Clear!". You can also select the images you want to clear in the Assets element list, and choose "Clear Imager transforms" from the element action dropdown menu.
 
 When transforming a remote image, the image will be downloaded and cached for the duration of the `cacheDurationRemoteFiles` configuration setting. You can manually remove the cached remote images by going to Settings > Clear Caches, selecting "Imager remote images cache" and clicking "Clear!".
-
----
-
-Performance
----
-The main motivation behind making the plugin (before I went down the rabbit hole full of image effects, crop options, etc), was to improve the performance when doing image transforms. When using the <picture> element and srcset-attribute, there is usually 50+ image transforms being done in most of our templates. That leads to alot of database queries. Did I succeed? Benchmarks coming soon (but, yes). 
 
 ---
 
