@@ -176,12 +176,13 @@ class ImagerService extends BaseApplicationComponent
 
         if (!IOHelper::getRealPath($pathsModel->targetPath)) {
             IOHelper::createFolder($pathsModel->targetPath, craft()->config->get('defaultFolderPermissions'), true);
-            $pathsModel->targetPath = IOHelper::getRealPath($pathsModel->targetPath);
 
             if (!IOHelper::getRealPath($pathsModel->targetPath)) {
                 throw new Exception(Craft::t('Target folder “{targetPath}” does not exist and could not be created',
                   array('targetPath' => $pathsModel->targetPath)));
             }
+            
+            $pathsModel->targetPath = IOHelper::getRealPath($pathsModel->targetPath);
         }
 
         if ($pathsModel->targetPath && !IOHelper::isWritable($pathsModel->targetPath)) {
@@ -348,7 +349,7 @@ class ImagerService extends BaseApplicationComponent
                 if ($this->hasSupportForWebP()) {
                     $this->_saveAsWebp($this->imageInstance, $targetFilePath, $sourceExtension, $saveOptions);
                 } else {
-                    throw new Exception(Craft::t('This version of {imageDriver} does not support the webp format. You should use “craft.imager.hasSupportForWebP” in your templates to test for it.',
+                    throw new Exception(Craft::t('This version of {imageDriver} does not support the webp format. You should use “craft.imager.serverSupportsWebp” in your templates to test for it.',
                       array('imageDriver' => $this->imageDriver == 'gd' ? 'GD' : 'Imagick')));
                 }
             } else {
